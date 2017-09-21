@@ -1,0 +1,9 @@
+1	Chris	782
+2	Hannah	583
+3	Jason	761
+4	Kyle	739
+5	Mike	786
+6	Rachel	499
+7	Sahand	728
+8	Tan	688
+9	Weixin	737
