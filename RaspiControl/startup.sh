@@ -12,5 +12,5 @@ sleep 1
 
 #start script
 cd /home/pi/semi-active-weightlifting-prosthetic-ankle/RaspiControl
-sudo python 2start.py
+sudo python menu.py
 
