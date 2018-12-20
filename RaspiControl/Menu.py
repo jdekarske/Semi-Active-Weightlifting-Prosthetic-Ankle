@@ -14,8 +14,10 @@ class Menu:
         self.bluetoothsetup = None
         self.bluetooth = None
         self.activemenu = 0
-
+        self.valves = None
         self.button = 16
+        self.psiflag = False
+        self.newpsi = 20
         GPIO.setup(self.button, GPIO.IN, pull_up_down=GPIO.PUD_UP)
 
     def wait4button(self):  # complicated way to discern between holds and presses
@@ -41,33 +43,38 @@ class Menu:
         self.sensor.setDaemon(True)
         self.sensor.start()
         self.bluetoothsetup = Utils.BluetoothSetup()
+        self.valves = Outputs.Valves(getpressure_function=self.sensor.get_pressures)
+        self.valves.setDaemon(True)
+        self.valves.start()
         self.led.set_status("startup", False)
 
     def loop(self):
         while True:
-            self.led.set_menu(0)
-            try:
-                connected = self.bluetooth.isAlive()
-            except AttributeError:
-                connected = False
-            if not connected:
-                if self.wait4button():
-                    print('connecting')
-                    self.led.set_status("connecting", True)
-                    self.bluetoothsetup.createnewsocket()
-                    self.bluetooth = Utils.Stream(clientsocket_function=self.bluetoothsetup.getclientsocket(),
-                                                  getangle_function=self.sensor.get_angles(),
-                                                  getpressure_function=self.sensor.get_pressures())
-                    self.bluetooth.setDaemon(True)
-                    self.bluetooth.start()
-                    self.led.set_status("connecting", False)
-            self.led.set_menu(1)
-            if self.wait4button():  # calibrate
-                print("calibrate")
-                #  calibrate()
-            self.led.set_menu(2)
-            if self.wait4button():  # walking/lifting
-                print("walking")
+            while not self.psiflag:  # check if there is a new desired pressure from the app
+                self.led.set_menu(0)
+                try:
+                    connected = self.bluetooth.isAlive()  # see if bluetooth is initiated yet
+                except AttributeError:
+                    connected = False
+                if not connected:  # if bluetooth is connected, skip this menu option
+                    if self.wait4button():  # wait here for user input
+                        print('connecting')
+                        self.led.set_status("connecting", True)
+                        self.bluetoothsetup.createnewsocket() #initiate connection
+                        self.bluetooth = Utils.Stream(clientsocket_function=self.bluetoothsetup.getclientsocket,
+                                                      getangle_function=self.sensor.get_angles,
+                                                      getpressure_function=self.sensor.get_pressures)
+                        self.valves.setbluetoothfunction(self.bluetooth.get_update)
+                        self.bluetooth.setDaemon(True)
+                        self.bluetooth.start()
+                        self.led.set_status("connecting", False)
+                self.led.set_menu(1)
+                if self.wait4button():  # TODO: calibrate
+                    print("calibrate")
+                self.led.set_menu(2)
+                if self.wait4button():  # TODO: switch between walking/lifting mode from button push
+                    print("walking")
+            self.valves.setpressure(self.newpsi)  # If there is a new desired pressure, do this
 
     def killthreads(self):
         self.sensor.set_stop_event()
