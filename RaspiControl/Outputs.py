@@ -3,6 +3,7 @@ import time
 import RPi.GPIO as GPIO
 import threading
 import csv
+import PCA9553
 GPIO.setmode(GPIO.BOARD)
 GPIO.setwarnings(False)
 
@@ -20,7 +21,7 @@ class Valves(threading.Thread):
 		self.commandpressure = 20
 		GPIO.setup(self.valves, GPIO.OUT, initial=GPIO.LOW)
 		self.threshold = 2
-		self.kp = .0000001
+		self.kp = .000001
 		self.kpatm = .01
 
 		self.defaultwalk = 20
@@ -47,7 +48,7 @@ class Valves(threading.Thread):
 						print(dur)
 						mode = 10
 					else:
-						print("pump it! Louder! Pump it! Louder! alright alright alright alright")
+						print("Look, pump it up if you came to get it crunk")
 						mode = 20
 						break
 				elif rerror > -1:
@@ -129,74 +130,47 @@ class LED(threading.Thread):
 	def __init__(self, fastspeed=.1, slowspeed=1):
 		threading.Thread.__init__(self)
 		self._stop_event = threading.Event()
-		self.ledr = 11
-		self.ledg = 13
-		self.ledb = 15
-		self.leds = [self.ledr, self.ledg, self.ledb]
-		GPIO.setup(self.leds, GPIO.OUT, initial=GPIO.LOW)
 		#  input from menu first arguement is a new update
 		#  "startup", "error", "low pressure", "connecting/disconnected(white)",
 		#  "calibrate/calibrating(blue)", "walking/lifting(green)" in order of priority
 		self.systemstatus = [False, [True, False, False, False, False, True]]
 		#  menu items are those with slashes
 		self.menu = 1
-		self.activecolor = self.ledr
 		self.fast = fastspeed
 		self.slow = slowspeed
-		self.const = 69  # if this speed stay on
-		self.speed = self.const
-		self.lasttime = time.time()
-		self.on = False
+		pca = PCA9553()
+		pca.setBlink(0,self.slow) # time between blinks
+        pca.setBlink(1,self.fast)
 
 	def __checkled(self):
 		if self.systemstatus[0]:  # flag the leds to change state
 			self.systemstatus[0] = False
 			if self.systemstatus[1][0]:  # startup
-				self.activecolor = self.ledr
-				self.speed = self.slow
+				self.pca.setLED(PCA9553.CHRED,2)
 			elif self.systemstatus[1][1]:  # error
-				self.activecolor = self.ledr
-				self.speed = self.const
+				self.pca.setLED(PCA9553.CHRED,0)
 			elif self.systemstatus[1][2]:  # low pressure
-				self.activecolor = self.ledr
-				self.speed = self.fast
+				self.pca.setLED(PCA9553.CHRED,3)
 			else:
 				if self.menu == 0:  # bluetooth stuff
 					if self.systemstatus[1][3]:  # disconnected
-						self.activecolor = self.leds
-						self.speed = self.slow
+						self.pca.setLED(PCA9553.CHRED,2)
+						self.pca.setLED(PCA9553.CHBLUE,2)
+						self.pca.setLED(PCA9553.CHGREEN,2)
 					else:  # connecting
-						self.activecolor = self.leds
-						self.speed = self.fast
+						self.pca.setLED(PCA9553.CHRED,3)
+						self.pca.setLED(PCA9553.CHBLUE,3)
+						self.pca.setLED(PCA9553.CHGREEN,3)
 				elif self.menu == 1:  # calibration stuff
 					if self.systemstatus[1][4]:  # calibrating
-						self.activecolor = self.ledb
-						self.speed = self.slow
+						self.pca.setLED(PCA9553.CHBLUE,2)
 					else:  # calibrate
-						self.activecolor = self.ledb
-						self.speed = self.fast
+						self.pca.setLED(PCA9553.CHBLUE,3)
 				elif self.menu == 2:
 					if self.systemstatus[1][5]:  # walking
-						self.activecolor = self.ledg
-						self.speed = self.slow
+						self.pca.setLED(PCA9553.CHGREEN,2)
 					else:  # "lifting"
-						self.activecolor = self.ledg
-						self.speed = self.fast
-
-	def __flash(self):  # can probably implement this in hardware
-		if self.speed == self.const:  # stay on
-			GPIO.output(self.leds, GPIO.LOW)   # clear all leds
-			GPIO.output(self.activecolor, GPIO.HIGH)  # then turn on the desired one
-		else:
-			now = time.time()
-			if now > (self.lasttime + self.speed):
-				self.lasttime = now
-				GPIO.output(self.leds, GPIO.LOW)
-				if self.on:
-					self.on = False
-					GPIO.output(self.activecolor, GPIO.HIGH)
-				else:
-					self.on = True  # the led is off anyway, but turn it on next loop
+						self.pca.setLED(PCA9553.CHGREEN,3)
 
 	def get_status(self):
 		return self.systemstatus[1]
@@ -226,10 +200,8 @@ class LED(threading.Thread):
 		try:
 			while not self._stop_event.is_set():
 				self.__checkled()
-				self.__flash()
 		finally:
 			print("clean LED exit!")
-			GPIO.cleanup()
 
 	def set_stop_event(self):  # sets a flag to kill this Thread.
 		self._stop_event.set()
