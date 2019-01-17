@@ -171,6 +171,7 @@ class LED(threading.Thread):
 						self.pca.setLED(PCA9553.CHGREEN,2)
 					else:  # "lifting"
 						self.pca.setLED(PCA9553.CHGREEN,3)
+			pca.go()
 
 	def get_status(self):
 		return self.systemstatus[1]
